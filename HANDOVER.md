@@ -4,9 +4,12 @@ _Rewritten at the end of each chunk of work._
 
 **State (2026-11-12 15:40):** Working prototype, published. All of plan section 9 can be shown in the app: identical vehicles for both models, gap acceptance and blocking, changeover lost time, live recalculation, junction-wide measures with net change, fixed seed, cases where each model wins, and instability flags. Engine tests: 14 passing.
 
-**Open it:** https://claude.ai/artifact/BY5mhMaM5WxTqE5RnxD4H3 (private to the owner).
+**Open it:**
+- Public, for anyone: https://gingerjono.github.io/traffic-lights/ (GitHub Pages; redeploys automatically on every push to main, after `npm test` passes).
+- Claude Artifact: https://claude.ai/artifact/BY5mhMaM5WxTqE5RnxD4H3 (private; republish `app/index.html` to update).
+- The repo is now **public** (user's choice, 2026-11-12).
 
-**Run locally:** `npm run serve` then open http://localhost:8765/. Tests: `npm test` (Node 18+, no dependencies to install).
+**Run locally:** `npm run serve` then open http://localhost:8765/. `npm run build` writes the standalone site to `dist/`. Tests: `npm test` (Node 18+, no dependencies to install).
 
 **Where things are:**
 - `PLAN.md`: the spec (user's plan). Section 9 = definition of done.

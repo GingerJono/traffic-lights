@@ -11,6 +11,7 @@
 - [ ] Heatmap: mark cells where a model is unstable
 
 ## Later
+- [ ] Bump workflow actions when Node 24 versions are out (Node 20 deprecation warning)
 - [ ] Pedestrian demand (plan says second version)
 - [ ] Three-phase signals, right-turn filter arrows, adaptive timings (engine phases are data, so this extends buildPlan)
 - [ ] Two general lanes per approach with lane choice
@@ -29,3 +30,4 @@
 - [x] Sensitivity heatmap (right-turn % × volume / cycle / gap / opposing flow)
 - [x] JSON import/export; CSV of vehicles and per-run results (copy-to-clipboard)
 - [x] Published as Artifact
+- [x] Public site on GitHub Pages with auto-deploy (repo made public)
