@@ -132,7 +132,7 @@ test('four-way can win: heavy right turns, strong opposing flow, long critical g
     ...withApproaches(defaultConfig(), (ap, a) => [
       { volume: 250, right: 80, left: 0 }, { volume: 30, right: 0, left: 0 }, { volume: 600, right: 0, left: 0 }, { volume: 30, right: 0, left: 0 },
     ][a]),
-    gap: 10, split: 'demand', separateTimings: true, cycle: 120, cycleB: 120, reps: 20,
+    gap: 10, split: 'demand', splitB: 'demand', separateTimings: true, cycle: 120, cycleB: 120, reps: 20,
   };
   const { agg } = runBatch(cfg);
   assert.ok(agg.diff.avgDelay.median < 0, `median diff ${agg.diff.avgDelay.median}`);

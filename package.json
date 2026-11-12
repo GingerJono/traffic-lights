@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Traffic Light Efficiency Model: two-way vs four-way signalling at a four-arm junction",
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "serve": "node tools/serve.mjs 8765"
   }
 }

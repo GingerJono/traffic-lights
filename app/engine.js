@@ -30,6 +30,7 @@ export function defaultConfig() {
     cycleB: 120,           // four-way cycle when separateTimings is true
     separateTimings: false,
     split: 'equal',        // 'equal' | 'demand'
+    splitB: 'equal',       // four-way split when separateTimings is true
     headway: 2.5,          // saturation discharge headway, s/veh
     lostTime: 4,           // intergreen (amber + all-red) lost per phase, s
     gap: 5,                // critical gap for an opposed right turn, s
@@ -114,16 +115,18 @@ function flowRatio(ap, headway) {
 // Build the phase list for a model: [{ approaches, green }], plus cycle and lost time.
 export function buildPlan(cfg, model) {
   const groups = model === 'A' ? [[0, 2], [1, 3]] : [[0], [1], [2], [3]];
-  const cycle = model === 'B' && cfg.separateTimings ? cfg.cycleB : cfg.cycle;
+  const own = model === 'B' && cfg.separateTimings;
+  const cycle = own ? cfg.cycleB : cfg.cycle;
+  const split = own ? (cfg.splitB ?? cfg.split) : cfg.split;
   const L = cfg.lostTime;
   const available = Math.max(groups.length, cycle - groups.length * L);
   let weights = groups.map(() => 1);
-  if (cfg.split === 'demand') {
+  if (split === 'demand') {
     weights = groups.map(g => Math.max(...g.map(a => flowRatio(cfg.approaches[a], cfg.headway)), 1e-3));
   }
   const wsum = weights.reduce((s, w) => s + w, 0);
   let greens = weights.map(w => available * w / wsum);
-  if (cfg.split === 'demand') {
+  if (split === 'demand') {
     const minG = Math.min(cfg.minGreen, available / groups.length);
     // Raise any phase below the minimum and take the time from the others pro rata.
     for (let k = 0; k < 3; k++) {
@@ -148,7 +151,7 @@ export function websterConfig(cfg) {
   const y = cfg.approaches.map(ap => flowRatio(ap, cfg.headway));
   const YA = Math.max(y[0], y[2]) + Math.max(y[1], y[3]);
   const YB = y.reduce((s, v) => s + v, 0);
-  return { ...cfg, split: 'demand', separateTimings: true,
+  return { ...cfg, split: 'demand', splitB: 'demand', separateTimings: true,
     cycle: websterCycle(2 * cfg.lostTime, YA), cycleB: websterCycle(4 * cfg.lostTime, YB) };
 }
 
@@ -480,7 +483,7 @@ export function summarise(run, opts = {}) {
     blockedPerApproachCycle: blockedTotal / 4 / cycles,
     obstructed,
     queueSlope: trend,                                     // veh/min over the second half
-    unstable: trend > 0.25 && remaining > 10,
+    unstable: trend > 0.25 && remaining > Math.max(10, 0.05 * arrived),
     perApproach: per.map((p, a) => ({
       ...p,
       avgDelay: p.arrived ? p.delay / p.arrived : 0,
@@ -609,7 +612,7 @@ export function optimiseTimings(cfg, { reps = 12, cycles = [40, 50, 60, 70, 80, 
   for (const model of MODELS) {
     let best = null;
     for (const split of splits) for (const C of cycles) {
-      const c2 = { ...cfg, split, separateTimings: true, cycle: model === 'A' ? C : cfg.cycle, cycleB: model === 'B' ? C : cfg.cycleB };
+      const c2 = model === 'A' ? { ...cfg, split, cycle: C } : { ...cfg, separateTimings: true, splitB: split, cycleB: C };
       let sum = 0;
       for (const veh of traffic) sum += summarise(simulate(c2, veh, model), { seriesStep: 600 }).avgDelay;
       const d = sum / reps;
@@ -620,6 +623,11 @@ export function optimiseTimings(cfg, { reps = 12, cycles = [40, 50, 60, 70, 80, 
   return result;
 }
 
+// Apply optimiser output to a config.
+export function withTimings(cfg, opt) {
+  return { ...cfg, separateTimings: true, cycle: opt.A.cycle, split: opt.A.split, cycleB: opt.B.cycle, splitB: opt.B.split };
+}
+
 // ---------------------------------------------------------------------------
 // Sensitivity: right-turn percentage x volume grid
 
@@ -628,18 +636,24 @@ export function sensitivityCell(cfg, volume, right, reps) {
     ...cfg,
     approaches: cfg.approaches.map(ap => ({ ...ap, volume, right, left: Math.min(ap.left, 100 - right) })),
   };
+  return compareCell(c2, reps);
+}
+
+// Compare A and B on `reps` runs of one configuration; compact result for grids.
+export function compareCell(cfg, reps) {
   const list = [];
   for (let r = 0; r < reps; r++) {
-    const { A, B } = runPair(c2, repSeed(cfg.seed, r), { seriesStep: 600 });
+    const { A, B } = runPair(cfg, repSeed(cfg.seed, r), { seriesStep: 600 });
     list.push({ A, B });
   }
   const dd = list.map(x => x.B.avgDelay - x.A.avgDelay).sort((a, b) => a - b);
   return {
-    volume, right,
     delayA: list.reduce((s, x) => s + x.A.avgDelay, 0) / reps,
     delayB: list.reduce((s, x) => s + x.B.avgDelay, 0) / reps,
     diffMedian: quantile(dd, 0.5),
     bWins: list.filter(x => x.B.avgDelay < x.A.avgDelay).length / reps,
+    unstableA: list.filter(x => x.A.unstable).length / reps,
+    unstableB: list.filter(x => x.B.unstable).length / reps,
   };
 }
 
@@ -647,20 +661,20 @@ export function sensitivityCell(cfg, volume, right, reps) {
 // Scenarios (plan section 7)
 
 export const SCENARIOS = [
-  { id: 'quiet', name: 'Quiet junction', note: 'Low demand, 10% right turns. Tests the value of simultaneous green.',
-    apply: c => ({ ...c, approaches: c.approaches.map(ap => ({ ...ap, volume: 250, right: 10, left: 10, layout: 'shared' })) }) },
-  { id: 'typical', name: 'Typical junction', note: 'Medium demand, 20% right turns.',
-    apply: c => ({ ...c, approaches: c.approaches.map(ap => ({ ...ap, volume: 450, right: 20, left: 10, layout: 'shared' })) }) },
-  { id: 'busy', name: 'Busy junction', note: 'High demand, 20% right turns. Tests how often right-turners block.',
-    apply: c => ({ ...c, approaches: c.approaches.map(ap => ({ ...ap, volume: 650, right: 20, left: 10, layout: 'shared' })) }) },
-  { id: 'heavyRight', name: 'Heavy right turns', note: 'High demand, 40% right turns. Can four-way win?',
-    apply: c => ({ ...c, approaches: c.approaches.map(ap => ({ ...ap, volume: 650, right: 40, left: 10, layout: 'shared' })) }) },
-  { id: 'uneven', name: 'Uneven traffic', note: '70/30 split: north–south carries 70% of the traffic, east–west 30%.',
-    apply: c => ({ ...c, approaches: c.approaches.map((ap, a) => ({ ...ap, volume: a % 2 === 0 ? 630 : 270, right: 20, left: 10, layout: 'shared' })) }) },
-  { id: 'pocket', name: 'Dedicated turning lane', note: 'High demand, 30% right turns, with a right-turn lane holding 6 cars.',
-    apply: c => ({ ...c, approaches: c.approaches.map(ap => ({ ...ap, volume: 650, right: 30, left: 10, layout: 'pocket', storage: 6 })) }) },
+  { id: 'quiet', name: 'Quiet junction', note: 'Low demand (200 veh/h per approach), 10% right turns. Tests the value of simultaneous green.',
+    apply: c => ({ ...c, approaches: c.approaches.map(ap => ({ ...ap, volume: 200, right: 10, left: 10, layout: 'shared' })) }) },
+  { id: 'typical', name: 'Typical junction', note: 'Medium demand (350 veh/h per approach), 20% right turns.',
+    apply: c => ({ ...c, approaches: c.approaches.map(ap => ({ ...ap, volume: 350, right: 20, left: 10, layout: 'shared' })) }) },
+  { id: 'busy', name: 'Busy junction', note: 'High demand (500 veh/h per approach), 20% right turns. Tests how often right-turners block.',
+    apply: c => ({ ...c, approaches: c.approaches.map(ap => ({ ...ap, volume: 500, right: 20, left: 10, layout: 'shared' })) }) },
+  { id: 'heavyRight', name: 'Heavy right turns', note: 'High demand (500 veh/h per approach), 40% right turns. Can four-way win?',
+    apply: c => ({ ...c, approaches: c.approaches.map(ap => ({ ...ap, volume: 500, right: 40, left: 10, layout: 'shared' })) }) },
+  { id: 'uneven', name: 'Uneven traffic', note: '70/30 split: north and south 560 veh/h each, east and west 240 veh/h each.',
+    apply: c => ({ ...c, approaches: c.approaches.map((ap, a) => ({ ...ap, volume: a % 2 === 0 ? 560 : 240, right: 20, left: 10, layout: 'shared' })) }) },
+  { id: 'pocket', name: 'Dedicated turning lane', note: 'High demand (500 veh/h per approach), 30% right turns, with a right-turn lane holding 6 cars.',
+    apply: c => ({ ...c, approaches: c.approaches.map(ap => ({ ...ap, volume: 500, right: 30, left: 10, layout: 'pocket', storage: 6 })) }) },
   { id: 'fourWayBest', name: 'Four-way’s best case', note: 'North: 250 veh/h, 80% turning right across 600 veh/h from the South; side roads quiet; right-turners need a 10 s gap (wide junction or poor sightlines); timings tuned for each model.',
-    apply: c => ({ ...c, gap: 10, split: 'demand', separateTimings: true, cycle: 120, cycleB: 120,
+    apply: c => ({ ...c, gap: 10, split: 'demand', splitB: 'demand', separateTimings: true, cycle: 120, cycleB: 120,
       approaches: c.approaches.map((ap, a) => ({ ...ap, layout: 'shared', ...[
         { volume: 250, right: 80, left: 0 }, { volume: 30, right: 0, left: 0 }, { volume: 600, right: 0, left: 0 }, { volume: 30, right: 0, left: 0 }][a] })) }) },
 ];
