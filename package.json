@@ -1,0 +1,10 @@
+{
+  "name": "traffic-lights",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Traffic Light Efficiency Model: two-way vs four-way signalling at a four-arm junction",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
