@@ -41,3 +41,10 @@ Browser app built and published as an Artifact.
 - Changed scenario volumes to quiet 200, typical 350, busy/heavy/turning-lane 500, uneven 560/240 veh/h. The earlier 450–650 left even two-way over capacity on a single lane (the plan's own section 5 sums give ~370 veh/h per approach at 25 s blocking).
 - Instability now also needs ≥ 5% of the period's vehicles left queued, which stops false flags from random queues near capacity.
 - Scenario results (tuned timings, 100 runs, seed 1): four-way loses every plan scenario. Quiet +30 s/veh; typical +207 s (four-way unstable); busy +483 s (both unstable); heavy right +519 s; uneven +381 s; right-turn lane +214 s. "Four-way's best case" (10 s gap, 80% right against 600 veh/h): four-way −45 s/veh, better in 91% of runs.
+
+## 2026-11-12 16:05
+Public hosting on GitHub Pages, for people without Claude.
+- User chose to make the repo public (the free plan doesn't allow Pages on private repos; the alternative was a separate public site repo). Scanned the full history for secrets first: none found.
+- `tools/page.mjs`: wraps `app/index.html` in a full HTML document (the Artifact host normally adds the skeleton). Shared by `tools/serve.mjs` and the new `tools/build.mjs` (`npm run build` → `dist/`, git-ignored).
+- `.github/workflows/pages.yml`: on every push to main, runs `npm test`, builds and deploys `dist/` to Pages. A failing test blocks the deploy.
+- The Artifact stays the same; both are built from the same `app/` files.

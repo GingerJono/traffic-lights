@@ -3,6 +3,7 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
+import { wrapPage } from './page.mjs';
 
 const root = new URL('../app/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 const port = Number(process.argv[2] || 8765);
@@ -15,10 +16,7 @@ http.createServer(async (req, res) => {
   if (!file.startsWith(normalize(root))) { res.writeHead(403).end(); return; }
   try {
     let body = await readFile(file);
-    if (path === '/index.html') {
-      body = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
-        + '<style>:root{color-scheme:light}body{margin:0;font:14px system-ui}[hidden]{display:none!important}</style></head><body>' + body + '</body></html>';
-    }
+    if (path === '/index.html') body = wrapPage(body.toString());
     res.writeHead(200, { 'Content-Type': types[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' }).end(body);
   } catch { res.writeHead(404).end('not found'); }
 }).listen(port, () => console.log(`http://localhost:${port}/`));
